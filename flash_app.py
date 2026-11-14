@@ -267,8 +267,8 @@ class Window(QMainWindow):
         self.progress.hide(); self.run_button.setEnabled(True)
         self.last_calculation_ready = True
         self.autocad_button.setEnabled(True)
-        self.status.setText(f"محاسبه انجام شد | نقاط: {r['points']} | وترها: {r['chords']} | "
-          f"فاصله‌ها: {r['offsets']}\nبیشترین فلش: {r['max']:.3f} در نقطه {r['critical']} "
+        self.status.setText(f"محاسبه انجام شد | نقاط: {r['points']} | بازه‌ها: {r['chords']} | "
+          f"فلش‌های محاسبه‌شده: {r['offsets']}\nبیشترین فلش: {r['max']:.3f} در نقطه {r['critical']} "
           f"(وتر {r['chord'][0]} تا {r['chord'][1]})\nخروجی: {r['output']}")
         QMessageBox.information(self,"پایان","فایل گزارش Excel ایجاد شد.")
     def failed(self,message):
