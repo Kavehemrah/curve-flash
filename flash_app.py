@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QFormLayout, QFrame, QLabel, QLineEdit, QPushButton, QComboBox, QFileDialog,
     QMessageBox, QProgressBar)
+from autocad_export import draw_flash_results
 
 
 @dataclass(frozen=True)
@@ -178,6 +179,7 @@ class Window(QMainWindow):
     def __init__(self):
         super().__init__()
         self.worker = None
+        self.last_calculation_ready = False
         self.setWindowTitle("Curve Flash | محاسبه فلش قوس")
         self.resize(780, 480)
         root = QWidget()
@@ -213,6 +215,10 @@ class Window(QMainWindow):
         self.run_button.setObjectName("run")
         self.run_button.clicked.connect(self.start)
         layout.addWidget(self.run_button)
+        self.autocad_button = QPushButton("ارسال نقاط فلش و اندازه‌گذاری به AutoCAD")
+        self.autocad_button.setEnabled(False)
+        self.autocad_button.clicked.connect(self.send_to_autocad)
+        layout.addWidget(self.autocad_button)
         self.progress = QProgressBar(); self.progress.setRange(0,0); self.progress.hide()
         layout.addWidget(self.progress)
         self.status = QLabel("آماده"); self.status.setObjectName("status"); self.status.setWordWrap(True)
@@ -249,19 +255,72 @@ class Window(QMainWindow):
             QMessageBox.warning(self,"خروجی","مسیر فایل خروجی را مشخص کنید."); return
         if Path(src).resolve()==Path(dst).resolve():
             QMessageBox.warning(self,"مسیر","فایل خروجی نباید روی فایل ورودی نوشته شود."); return
+        self.last_calculation_ready = False
+        self.autocad_button.setEnabled(False)
         self.run_button.setEnabled(False); self.progress.show(); self.status.setText("در حال محاسبه...")
         self.worker=Worker(src,self.sheet.currentText(),dst)
         self.worker.success.connect(self.finished); self.worker.failure.connect(self.failed); self.worker.start()
     def finished(self,r):
         self.progress.hide(); self.run_button.setEnabled(True)
+        self.last_calculation_ready = True
+        self.autocad_button.setEnabled(True)
         self.status.setText(f"محاسبه انجام شد | نقاط: {r['points']} | وترها: {r['chords']} | "
           f"فاصله‌ها: {r['offsets']}\nبیشترین فلش: {r['max']:.3f} در نقطه {r['critical']} "
           f"(وتر {r['chord'][0]} تا {r['chord'][1]})\nخروجی: {r['output']}")
         QMessageBox.information(self,"پایان","فایل گزارش Excel ایجاد شد.")
     def failed(self,message):
         self.progress.hide(); self.run_button.setEnabled(True)
+        self.last_calculation_ready = False
+        self.autocad_button.setEnabled(False)
         self.status.setText("پردازش ناموفق بود.")
         QMessageBox.critical(self,"خطای محاسبه",message)
+
+    def send_to_autocad(self):
+        if not self.last_calculation_ready:
+            QMessageBox.warning(self, "ارسال به AutoCAD", "ابتدا محاسبه را با موفقیت انجام دهید.")
+            return
+        source = self.source.text().strip()
+        if not source or not Path(source).is_file():
+            QMessageBox.warning(self, "فایل ورودی", "فایل Excel ورودی پیدا نشد.")
+            return
+        answer = QMessageBox.question(
+            self,
+            "تأیید ترسیم در AutoCAD",
+            "قرار است نقاط بحرانی، خطوط عمود و اندازه‌گذاری‌ها در نقشه فعال AutoCAD رسم شوند.\\n"
+            "پیشنهاد می‌شود پیش از ادامه از فایل DWG یک نسخه پشتیبان بگیرید.\\n\\nادامه می‌دهید؟",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        try:
+            _title, _rows, points = read_points(source, self.sheet.currentText())
+            results, _details = calculate(points, 18)
+            self.autocad_button.setEnabled(False)
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+            try:
+                report = draw_flash_results(points, results)
+            finally:
+                QApplication.restoreOverrideCursor()
+            self.status.setText(
+                f"ترسیم در AutoCAD انجام شد | نقشه: {report['drawing']} | "
+                f"اندازه‌گذاری‌ها: {report['dimensions']} | لایه: {report['layer']}"
+            )
+            if report["skipped"]:
+                QMessageBox.warning(
+                    self, "ترسیم با هشدار",
+                    f"{report['dimensions']} اندازه‌گذاری رسم شد و {report['skipped']} مورد به علت داده نامعتبر رد شد."
+                )
+            else:
+                QMessageBox.information(
+                    self, "پایان ترسیم",
+                    f"{report['dimensions']} نقطه بحرانی و اندازه‌گذاری در نقشه "
+                    f"{report['drawing']} روی لایه {report['layer']} رسم شد."
+                )
+        except Exception as exc:
+            QMessageBox.critical(self, "خطای اتصال یا ترسیم AutoCAD", str(exc))
+        finally:
+            self.autocad_button.setEnabled(self.last_calculation_ready)
 
 
 def main():
