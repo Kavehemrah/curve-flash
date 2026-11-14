@@ -92,19 +92,21 @@ def offset(a, b, p):
 
 
 def calculate(points, interval=18):
+    """Calculate one midpoint flash for each non-overlapping 18-interval chord.
+
+    Example: points 1..19 produce one chord (1, 19), measured only at point 10.
+    The next chord starts at point 19, then 37, and so on.
+    """
     if len(points) <= interval:
         raise ValueError("تعداد نقاط برای فاصله وتر ۱۸ کافی نیست.")
     results, details = [], []
-    for i in range(len(points)-interval):
+    for i in range(0, len(points)-interval, interval):
         a, b = points[i], points[i+interval]
-        local = []
-        for p in points[i+1:i+interval]:
-            signed = offset(a, b, p)
-            item = (a.number, b.number, p.number, signed, abs(signed))
-            local.append(item)
-            details.append(item)
-        critical = max(local, key=lambda v: v[4])
-        results.append((a.number, b.number, critical[2], critical[3], critical[4], len(local)))
+        midpoint = points[i + interval // 2]
+        signed = offset(a, b, midpoint)
+        item = (a.number, b.number, midpoint.number, signed, abs(signed))
+        details.append(item)
+        results.append((a.number, b.number, midpoint.number, signed, abs(signed), 1))
     return results, details
 
 
