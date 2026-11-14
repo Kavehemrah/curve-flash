@@ -11,8 +11,12 @@ from math import hypot
 LAYER_NAME = "FLASH_CHECK"
 
 
-def _xyz(x: float, y: float) -> tuple[float, float, float]:
-    return float(x), float(y), 0.0
+def _xyz(x: float, y: float, pythoncom, win32com):
+    """Build an explicit AutoCAD-compatible SAFEARRAY of three doubles."""
+    return win32com.client.VARIANT(
+        pythoncom.VT_ARRAY | pythoncom.VT_R8,
+        (float(x), float(y), 0.0),
+    )
 
 
 def draw_flash_results(points, results, layer_name: str = LAYER_NAME) -> dict:
@@ -80,8 +84,8 @@ def draw_flash_results(points, results, layer_name: str = LAYER_NAME) -> dict:
             t = ((p.easting - a.easting) * dx + (p.northing - a.northing) * dy) / length_sq
             foot_x = a.easting + t * dx
             foot_y = a.northing + t * dy
-            point_xyz = _xyz(p.easting, p.northing)
-            foot_xyz = _xyz(foot_x, foot_y)
+            point_xyz = _xyz(p.easting, p.northing, pythoncom, win32com)
+            foot_xyz = _xyz(foot_x, foot_y, pythoncom, win32com)
 
             circle = model.AddCircle(point_xyz, marker_radius)
             circle.Layer = layer_name
@@ -94,7 +98,7 @@ def draw_flash_results(points, results, layer_name: str = LAYER_NAME) -> dict:
                 (p.easting - marker_radius * 1.5, p.northing + marker_radius * 1.5,
                  p.easting + marker_radius * 1.5, p.northing - marker_radius * 1.5),
             ):
-                mark = model.AddLine(_xyz(x1, y1), _xyz(x2, y2))
+                mark = model.AddLine(_xyz(x1, y1, pythoncom, win32com), _xyz(x2, y2, pythoncom, win32com))
                 mark.Layer = layer_name
                 mark.Color = 1
 
@@ -115,14 +119,14 @@ def draw_flash_results(points, results, layer_name: str = LAYER_NAME) -> dict:
                 dim_x = (p.easting + foot_x) / 2
                 dim_y = (p.northing + foot_y) / 2 + marker_radius * 4
 
-            dimension = model.AddDimAligned(point_xyz, foot_xyz, _xyz(dim_x, dim_y))
+            dimension = model.AddDimAligned(point_xyz, foot_xyz, _xyz(dim_x, dim_y, pythoncom, win32com))
             dimension.Layer = layer_name
             dimension.Color = 1
             dimension.TextOverride = f"{abs_flash:.3f}"
 
             label = model.AddText(
                 f"P{critical_no}",
-                _xyz(p.easting + marker_radius * 2, p.northing + marker_radius * 2),
+                _xyz(p.easting + marker_radius * 2, p.northing + marker_radius * 2, pythoncom, win32com),
                 text_height,
             )
             label.Layer = layer_name
