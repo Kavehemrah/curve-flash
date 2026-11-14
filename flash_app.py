@@ -132,7 +132,7 @@ def export_report(path, title, rows, points, results, details):
     summary.append(["Chord start", "Chord end", "Critical point", "Signed flash", "Absolute flash", "Internal points"])
     for r in results:
         summary.append(list(r))
-    detail = wb.create_sheet("Point Deviations")
+    detail = wb.create_sheet("Midpoint Flash")
     detail.append(["Chord start", "Chord end", "Point", "Signed perpendicular offset", "Absolute offset"])
     for d in details:
         detail.append(list(d))
@@ -289,7 +289,7 @@ class Window(QMainWindow):
         answer = QMessageBox.question(
             self,
             "تأیید ترسیم در AutoCAD",
-            "قرار است نقاط بحرانی، خطوط عمود و اندازه‌گذاری‌ها در نقشه فعال AutoCAD رسم شوند.\\n"
+            "قرار است فقط نقطه میانی هر بازه و اندازه فلش آن در نقشه فعال AutoCAD رسم شوند.\\n"
             "پیشنهاد می‌شود پیش از ادامه از فایل DWG یک نسخه پشتیبان بگیرید.\\n\\nادامه می‌دهید؟",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
