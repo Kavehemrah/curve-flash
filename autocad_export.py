@@ -1,18 +1,16 @@
-"""Draw Curve Flash critical points and dimensions in the active AutoCAD drawing.
+"""Draw one midpoint flash point and its dimension in active AutoCAD.
 
-Excel columns are mapped as: A=point number, B=Northing/Y, C=Easting/X.
-Only connects to an already-running AutoCAD instance; it never launches AutoCAD.
+Excel columns: A=point number, B=Northing/Y, C=Easting/X.
+Only connects to an already-running AutoCAD instance.
 """
 from __future__ import annotations
-
-from math import hypot
 
 
 LAYER_NAME = "FLASH_CHECK"
 
 
 def _xyz(x: float, y: float, pythoncom, win32com):
-    """Build an explicit AutoCAD-compatible SAFEARRAY of three doubles."""
+    """Build an AutoCAD-compatible SAFEARRAY of three doubles."""
     return win32com.client.VARIANT(
         pythoncom.VT_ARRAY | pythoncom.VT_R8,
         (float(x), float(y), 0.0),
@@ -20,7 +18,7 @@ def _xyz(x: float, y: float, pythoncom, win32com):
 
 
 def draw_flash_results(points, results, layer_name: str = LAYER_NAME) -> dict:
-    """Draw one red marker, perpendicular and aligned dimension per chord result."""
+    """Draw exactly one red point and one aligned dimension per chord."""
     try:
         import pythoncom
         import win32com.client
@@ -50,7 +48,7 @@ def draw_flash_results(points, results, layer_name: str = LAYER_NAME) -> dict:
         except Exception:
             layer = doc.Layers.Add(layer_name)
 
-        layer.Color = 1  # AutoCAD Color Index: red
+        layer.Color = 1
         layer.LayerOn = True
         layer.Lock = False
 
@@ -58,79 +56,63 @@ def draw_flash_results(points, results, layer_name: str = LAYER_NAME) -> dict:
             raise RuntimeError("داده‌ای برای ترسیم وجود ندارد.")
 
         by_number = {p.number: p for p in points}
-        xs = [p.easting for p in points]
-        ys = [p.northing for p in points]
-        extent = max(max(xs) - min(xs), max(ys) - min(ys), 1.0)
-        marker_radius = max(extent * 0.001, 0.01)
-        text_height = marker_radius * 2.5
         model = doc.ModelSpace
         drawn = 0
         skipped = []
 
-        for start_no, end_no, critical_no, signed_flash, abs_flash, _count in results:
-            if start_no not in by_number or end_no not in by_number or critical_no not in by_number:
-                skipped.append((start_no, end_no, critical_no))
+        for start_no, end_no, midpoint_no, signed_flash, abs_flash, _count in results:
+            if start_no not in by_number or end_no not in by_number or midpoint_no not in by_number:
+                skipped.append((start_no, end_no, midpoint_no))
                 continue
 
-            a, b, p = by_number[start_no], by_number[end_no], by_number[critical_no]
+            a = by_number[start_no]
+            b = by_number[end_no]
+            midpoint = by_number[midpoint_no]
             dx = b.easting - a.easting
             dy = b.northing - a.northing
             length_sq = dx * dx + dy * dy
             if length_sq <= 1e-20:
-                skipped.append((start_no, end_no, critical_no))
+                skipped.append((start_no, end_no, midpoint_no))
                 continue
 
-            # Projection on the infinite chord line, consistent with the calculation.
-            t = ((p.easting - a.easting) * dx + (p.northing - a.northing) * dy) / length_sq
+            # Foot of the perpendicular from the single midpoint to the chord.
+            t = ((midpoint.easting - a.easting) * dx +
+                 (midpoint.northing - a.northing) * dy) / length_sq
             foot_x = a.easting + t * dx
             foot_y = a.northing + t * dy
-            point_xyz = _xyz(p.easting, p.northing, pythoncom, win32com)
+
+            point_xyz = _xyz(midpoint.easting, midpoint.northing, pythoncom, win32com)
             foot_xyz = _xyz(foot_x, foot_y, pythoncom, win32com)
 
-            circle = model.AddCircle(point_xyz, marker_radius)
-            circle.Layer = layer_name
-            circle.Color = 1
+            # Exactly one point entity for the midpoint.
+            point_entity = model.AddPoint(point_xyz)
+            point_entity.Layer = layer_name
+            point_entity.Color = 1
 
-            # Cross marker makes the critical point visible at different zoom levels.
-            for x1, y1, x2, y2 in (
-                (p.easting - marker_radius * 1.5, p.northing - marker_radius * 1.5,
-                 p.easting + marker_radius * 1.5, p.northing + marker_radius * 1.5),
-                (p.easting - marker_radius * 1.5, p.northing + marker_radius * 1.5,
-                 p.easting + marker_radius * 1.5, p.northing - marker_radius * 1.5),
-            ):
-                mark = model.AddLine(_xyz(x1, y1, pythoncom, win32com), _xyz(x2, y2, pythoncom, win32com))
-                mark.Layer = layer_name
-                mark.Color = 1
-
-            perpendicular = model.AddLine(point_xyz, foot_xyz)
-            perpendicular.Layer = layer_name
-            perpendicular.Color = 1
-
-            foot_mark = model.AddCircle(foot_xyz, marker_radius * 0.45)
-            foot_mark.Layer = layer_name
-            foot_mark.Color = 1
-
-            vx, vy = p.easting - foot_x, p.northing - foot_y
-            distance = hypot(vx, vy)
+            # The aligned dimension itself displays the perpendicular flash.
+            # Offset the dimension line slightly from the perpendicular midpoint.
+            vx = midpoint.easting - foot_x
+            vy = midpoint.northing - foot_y
+            distance = (vx * vx + vy * vy) ** 0.5
             if distance > 1e-12:
-                dim_x = (p.easting + foot_x) / 2 + (vx / distance) * marker_radius * 4
-                dim_y = (p.northing + foot_y) / 2 + (vy / distance) * marker_radius * 4
+                dim_x = (midpoint.easting + foot_x) / 2 + (vx / distance) * max(distance * 0.15, 0.01)
+                dim_y = (midpoint.northing + foot_y) / 2 + (vy / distance) * max(distance * 0.15, 0.01)
             else:
-                dim_x = (p.easting + foot_x) / 2
-                dim_y = (p.northing + foot_y) / 2 + marker_radius * 4
+                # A zero flash cannot form a non-zero aligned dimension.
+                # Keep the point and report it as skipped rather than adding
+                # misleading or overlapping dimension geometry.
+                skipped.append((start_no, end_no, midpoint_no))
+                drawn += 1
+                continue
 
-            dimension = model.AddDimAligned(point_xyz, foot_xyz, _xyz(dim_x, dim_y, pythoncom, win32com))
+            dimension = model.AddDimAligned(
+                point_xyz,
+                foot_xyz,
+                _xyz(dim_x, dim_y, pythoncom, win32com),
+            )
             dimension.Layer = layer_name
             dimension.Color = 1
             dimension.TextOverride = f"{abs_flash:.3f}"
-
-            label = model.AddText(
-                f"P{critical_no}",
-                _xyz(p.easting + marker_radius * 2, p.northing + marker_radius * 2, pythoncom, win32com),
-                text_height,
-            )
-            label.Layer = layer_name
-            label.Color = 1
             drawn += 1
 
         doc.Regen(1)
