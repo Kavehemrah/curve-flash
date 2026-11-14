@@ -102,7 +102,6 @@ def draw_flash_results(points, results, layer_name: str = LAYER_NAME) -> dict:
                 # Keep the point and report it as skipped rather than adding
                 # misleading or overlapping dimension geometry.
                 skipped.append((start_no, end_no, midpoint_no))
-                drawn += 1
                 continue
 
             dimension = model.AddDimAligned(
