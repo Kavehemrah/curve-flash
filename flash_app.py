@@ -92,16 +92,18 @@ def offset(a, b, p):
 
 
 def calculate(points, interval=18):
-    """Calculate one midpoint flash for each non-overlapping 18-interval chord.
+    """Calculate only the exact midpoint flash for every sliding chord.
 
-    Example: points 1..19 produce one chord (1, 19), measured only at point 10.
-    The next chord starts at point 19, then 37, and so on.
+    The chord spans 18 point intervals and its midpoint is the only measured
+    point. The window advances by ONE point each time:
+    (1, 19) -> point 10, (2, 20) -> point 11, (3, 21) -> point 12, etc.
     """
     if len(points) <= interval:
         raise ValueError("تعداد نقاط برای فاصله وتر ۱۸ کافی نیست.")
     results, details = [], []
-    for i in range(0, len(points)-interval, interval):
-        a, b = points[i], points[i+interval]
+    # One result for every possible 18-interval chord, sliding by one point.
+    for i in range(len(points) - interval):
+        a, b = points[i], points[i + interval]
         midpoint = points[i + interval // 2]
         signed = offset(a, b, midpoint)
         item = (a.number, b.number, midpoint.number, signed, abs(signed))
@@ -129,7 +131,7 @@ def export_report(path, title, rows, points, results, details):
     ws.auto_filter.ref = ws.dimensions
 
     summary = wb.create_sheet("Flash Results")
-    summary.append(["Chord start", "Chord end", "Critical point", "Signed flash", "Absolute flash", "Internal points"])
+    summary.append(["Chord start", "Chord end", "Midpoint", "Signed flash", "Absolute flash", "Measured points"])
     for r in results:
         summary.append(list(r))
     detail = wb.create_sheet("Midpoint Flash")
@@ -211,7 +213,8 @@ class Window(QMainWindow):
         form.addRow("فایل خروجی:",r2)
         layout.addWidget(panel)
         info = QLabel("قالب داده: ستون A شماره نقطه، ستون B مختصات شمالی (Y)، ستون C مختصات شرقی (X). "
-                      "وتر از نقطه i تا i+18 تشکیل می‌شود و ۱۷ نقطه داخلی بررسی می‌شوند. "
+                      "برای هر وتر ۱۸ فاصله‌ای فقط نقطه وسط اندازه‌گیری می‌شود؛ پنجره هر بار یک نقطه جلو می‌رود "
+                      "(۱–۱۹: نقطه ۱۰، ۲–۲۰: نقطه ۱۱، ۳–۲۱: نقطه ۱۲ و به همین ترتیب). "
                       "واحد فلش برابر واحد مختصات ورودی است.")
         info.setWordWrap(True); info.setObjectName("info"); layout.addWidget(info)
         self.run_button = QPushButton("شروع محاسبه و ساخت فایل خروجی")
