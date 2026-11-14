@@ -1,6 +1,7 @@
 """Curve Flash: PySide6 GUI for Excel point-coordinate flash calculations."""
 from __future__ import annotations
 import sys
+import traceback
 from pathlib import Path
 from dataclasses import dataclass
 from math import hypot
@@ -318,7 +319,17 @@ class Window(QMainWindow):
                     f"{report['drawing']} روی لایه {report['layer']} رسم شد."
                 )
         except Exception as exc:
-            QMessageBox.critical(self, "خطای اتصال یا ترسیم AutoCAD", str(exc))
+            print("\\n" + "=" * 72, file=sys.stderr)
+            print("[Curve Flash] AutoCAD export failed", file=sys.stderr)
+            print(f"Exception: {type(exc).__name__}: {exc}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            print("=" * 72 + "\\n", file=sys.stderr)
+            sys.stderr.flush()
+            QMessageBox.critical(
+                self,
+                "خطای اتصال یا ترسیم AutoCAD",
+                f"{type(exc).__name__}: {exc}\\n\\nجزئیات کامل خطا در پنجره ترمینال نمایش داده شد."
+            )
         finally:
             self.autocad_button.setEnabled(self.last_calculation_ready)
 
